@@ -17,8 +17,7 @@ Encrypt a file using AES-256 and hide it in any pdf document.
 *note: pdftk may issue a warning when re-compressing*
 
 ###How it works
-These object parameters: **"/Subtype /Type1C", "/Subtype /Image", or "/BitsPerSample"**, define streams which can hold raw binary data and are considered safe. The first parameter found in the $targetpdf will be used for the injection, and henceforth the last occurence of that parameter will be the entrypoint. The encrypted data will be appended to the data already present in the stream along with a prepended identifier "6d796f6f6c"(myool). The result of this injection should not affect the quality of images, fonts, pages, loading times, etc. But that isn't guaranteed! Results may vary!
-
+These object parameters: **"/Subtype /Type1C", "/Subtype /Image", or "/BitsPerSample"**, define streams which can hold raw binary data and are considered safe. The first parameter found in the $targetpdf will be used for the injection, and henceforth the last occurence of that parameter will be the entrypoint. The encrypted data will be appended to the data already present in the stream along with a prepended identifier "6d796f6f6c"(myool).
 ```
 592 0 obj
 <<
@@ -44,9 +43,9 @@ F^@^A^B^A^@H^@H^@^@ÿí^@^LAdobe_CM^@^Bÿî.......raw binary data
 encrypted data goes here  <--- Appended data
 endstream
 ```
+When it comes time to recompress the $targetpdf to $enc-targetpdf, *pdftk* will fix the object and the XREF table to accomodate the increase in size. The result of this injection should not affect the quality of images, fonts, pages, loading times, etc. But that isn't guaranteed! Results may vary!
 
-If no parameters are found, the $targetpdf will still contain some stream in it that may be used for injection. Most of the time it is a text stream *see below*. However, the stream may not be meant to hold raw binary data. If thats the case, then theres a good chance you will run into warnings regarding the format or data on the page where the data was injected into. The page could raise an error and or not display anything at all. And lastly, depending on the size of the encrypted data, the resultant pdf may spend some time loading when you open it, before displaying the pages (regardless of which reader you use).
-
+If no parameters are found, the $targetpdf will still contain some stream in it that may be used for injection. Most of the time it is a text stream *see below*. However, the stream may not be meant to hold raw binary data. 
 ```
 5 0 obj
 <<
@@ -67,6 +66,7 @@ Q
 encrypted data goes here  <--- Appended data
 endstream 
 ```
+If thats the case, then theres a good chance you will run into warnings regarding the format or data on the page where the data was injected into. The page could raise an error and or not display anything at all. And lastly, depending on the size of the encrypted data, the resultant pdf may spend some time loading when you open it, before displaying the pages (regardless of which reader you use).
 
 ###**FUTURE:**
 
