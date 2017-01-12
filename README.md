@@ -43,6 +43,8 @@ F^@^A^B^A^@H^@H^@^@ÿí^@^LAdobe_CM^@^Bÿî.......raw binary data
 encrypted data goes here  <--- Appended data
 endstream
 ```
+*That's literally it*
+
 When it comes time to recompress the $targetpdf to $enc-targetpdf, *pdftk* will fix the object and the XREF table to accomodate the increase in size. The result of this injection should not affect the quality of images, fonts, pages, loading times, etc. But that isn't guaranteed! Results may vary!
 
 If no parameters are found, the $targetpdf will still contain some stream in it that may be used for injection. Most of the time it is a text stream *see below*. However, the stream may not be meant to hold raw binary data. 
