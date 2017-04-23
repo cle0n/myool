@@ -8,12 +8,13 @@
 #             |_____|                    #
 #                                        #
 #========================================#
-# Version 2.4
+# Version: 3 ?
 # AUTHOR: cle0n
-# Description: Encrypt a file and hide it in any PDF
-# Dependancies: pdftk
+# Description: Encrypt a file. Split it up. Scramble the chunks and hide it in any PDF
+# Requires: pdftk
+# Tested on Ubuntu, Debian
 
-# ISSUE: The EOF on enc.data and unenc.data are different. gpg therefore issues a warning before it decrypts.
+# : The EOF on enc.data and unenc.data are different. gpg issues a warning before it decrypts.
 
 ########################-->        USAGE       <--########################
 
@@ -22,42 +23,70 @@ usage() {
     echo "USAGE reveal : myool.sh reveal [targetpdf]"
 }
 
-########################--> LOCATE ENTRY POINT <--########################
+##########################--> GET INCREMENTOR <--#########################
 
-locate_entry_point() {
+get_incrementor() {
+    local e_count=$1
+    local newlines=$2
+
+    incrementor=$((newlines / e_count))
+
+    if [ $newlines -lt $e_count ]; then
+        # return 1 = no split.
+        echo 1
+        return
+    fi
+
+    echo $incrementor
+}
+
+
+########################--> LOCATE ENTRY POINTS <--########################
+
+locate_entry_points() {
 
     local array
 
-    local image=(`grep -an '/Subtype /Image' uncomp.pdf | cut -d ':' -f1 `)
-    array=(${image[*]})
-
-    if [ -z $image ]; then
-	local typec=(`grep -an '/Subtype /Type1C' uncomp.pdf | cut -d ':' -f1 `)
-	array=(${typec[*]})
-	if [ -z $typec ]; then
-	    local bits=(`grep -an '/BitsPerSample' uncomp.pdf | cut -d ':' -f1 `)
-	    array=(${bits[*]})
-	    if [ -z $bits ]; then
-		echo 1
-		return
-	    fi
-	fi
+    array+=(`grep -an '/Subtype /Image' uncomp.pdf | cut -d ':' -f1 `)
+    array+=(`grep -an '/Subtype /Type1C' uncomp.pdf | cut -d ':' -f1 `)
+    array+=(`grep -an '/BitsPerSample' uncomp.pdf | cut -d ':' -f1 `)
+    if [ -z $array ]; then
+        echo 1
+        return
     fi
 
     local endstream=(`grep -an 'endstream' uncomp.pdf | cut -d ':' -f1 `)
     local es_count=0
 
-    local arrayc=`wc -w <<< ${array[*]}`
-    let local count="$arrayc - 1"
+    local arrayc=${#array[*]}
+    local index=0
 
-    while true; do
-	if [ "${array[$count]}" -lt "${endstream[$es_count]}" ]; then
-	    break
+    array=(`echo ${array[*]} | tr ' ' '\n' | sort -n | tr '\n' ' '`)
+
+    while [ $index -lt $arrayc ]; do
+	if [ ${array[$index]} -lt ${endstream[$es_count]} ]; then
+            newerarray+=(${endstream[$es_count]})
+            index=$((index + 1))
 	fi
-	es_count=$((es_count + 1))
+        es_count=$((es_count + 1))
     done
 
-    echo ${endstream[$es_count]}
+    newerarray=(`shuf -e ${newerarray[*]} | tr "\n" " "`)
+
+    local newlines=`wc -l enc.data | cut -d ' ' -f1`
+    incrementor=$(get_incrementor $arrayc $newlines)
+
+    for (( i=0; i<${arrayc}-1; i++ ));
+    do
+        for (( j=${i}; j<${arrayc}-1; j++ ));
+        do
+            if [ ${newerarray[$j+1]} -gt ${newerarray[$i]} ]; then
+                ((newerarray[$j+1]+=$incrementor+1))
+            fi
+        done
+    done
+
+    echo $incrementor $arrayc $newlines ${newerarray[*]}
 }
 
 ########################-->        HIDE        <--########################
@@ -65,6 +94,7 @@ locate_entry_point() {
 hide() {
     filetohide=$(basename "$2")
     targetpdf=$(basename "$3")
+    key="6d796f6f6c"
 
     echo "[*] Encrypting data"
     gpg --output enc.data --symmetric --cipher-algo AES256 $filetohide 2> /dev/null
@@ -74,19 +104,48 @@ hide() {
 	exit
     fi
 
+    echo "[*] Overwriting gpg file signature"
+    ranbytes=`xxd -l 6 /dev/urandom | cut -d ' ' -f2,3,4 | tr -d ' '`
+    echo -n "0: $ranbytes" | xxd -r - enc.data
+
     echo "[*] Uncompressing target pdf"
     pdftk $targetpdf output uncomp.pdf uncompress
 
-    echo "[*] Finding entry point ..."
-    entrypoint=$(locate_entry_point)
+    echo "[*] Calculating entry points..."
+    read incrementor e_count newlines entrypoints < <(locate_entry_points)
+    entrypoints=($entrypoints)
 
-    if [ "$entrypoint" == 1 ]; then
-	echo "[-] No safe entrypoint found. Injecting into first stream..."
-	sed -i '0,/endstream/s//6d796f6f6c/' uncomp.pdf
-	sed -i -e '/6d796f6f6c/ r enc.data' -e '// a endstream' uncomp.pdf
+    if [ $entrypoints -eq 1 ]; then
+	echo "[-] No safe entrypoints found. Injecting everything into first stream..."
+	sed -i '0,/endstream/s//'"$key"'/' uncomp.pdf
+	sed -i -e '/'"$key"'/ r enc.data' -e '// a endstream' uncomp.pdf
     else
-	echo "[+] Entry point located. Injecting..."
-	sed -i -e ''"${entrypoint}"'s/endstream/6d796f6f6c/' -e '/6d796f6f6c/ r enc.data' -e '// a endstream' uncomp.pdf
+	echo "[+] Entry points located. Injecting..."
+
+        index=0
+        startblock=1
+        endblock=$((startblock+incrementor-1))
+        entry=${entrypoints[$index]}
+
+        # faster way to use sed here?
+        while [ $index -lt $e_count ]; do
+            sed -i \
+                ''"$entry"' {
+                    s/endstream/'"$key"''"$index"'/
+                    a endstream
+                    p
+                    s/'"$key"''"$index"'/sed '"$startblock"','"$endblock"'!d enc.data/e
+                }' uncomp.pdf
+
+            ((index++))
+            ((entry=entrypoints[index]))
+            ((startblock=endblock+1))
+            ((endblock=endblock+incrementor))
+
+            if [ $index -eq $((e_count-1)) ]; then
+                ((endblock+=99999))
+            fi
+        done
     fi
 
     rm enc.data
@@ -101,12 +160,25 @@ hide() {
 
 reveal() {
     targetpdf=$(basename "$2")
+    key="6d796f6f6c"
+    index=0
 
     echo "[*] Uncompressing target pdf"
     pdftk $targetpdf output uncomp.pdf uncompress
 
+    count=`grep -a $key uncomp.pdf | wc -l`
+
     echo "[*] Attemping data extraction"
-    sed -e '1,/6d796f6f6c/d' -e '/endstream/,$d' uncomp.pdf > unenc.data
+    while [ $index -lt $count ]; do
+        sed '1,/'"$key"''"$index"' /d;/endstream/,$d' uncomp.pdf >> unenc.data
+        ((index++))
+        truncate -s -1 unenc.data
+    done
+
+    echo "[*] Rewriting gpg file signature"
+    gpgsig="8c0d04090302"
+    echo -n "0: $gpgsig" | xxd -r - unenc.data
+
     rm uncomp.pdf
 
     echo "[*] Decrypting data"
