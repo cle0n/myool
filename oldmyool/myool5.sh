@@ -15,6 +15,8 @@
 
 # ISSUE: The EOF on enc.data and unenc.data are different. gpg therefore issues a warning before it decrypts.
 
+# Faster than current version (3?) because it doesn't have multiple entry points. thus multiples sed invocations.
+
 ########################-->        USAGE       <--########################
 
 usage() {
