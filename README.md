@@ -1,6 +1,6 @@
 # myool
 
-Encrypt a file using AES-256 and hide it in any pdf document.
+Encrypt a file(archive) using AES-256 and hide it in any pdf document. \**requires pdftk for PDF compression*\*
 
 ### To hide a file:
 ```bash
@@ -17,7 +17,7 @@ Encrypt a file using AES-256 and hide it in any pdf document.
 *note: pdftk may issue a warning when re-compressing*
 
 ### How it works
-These object parameters: **"/Subtype /Type1C", "/Subtype /Image", or "/BitsPerSample"**, define streams which can hold raw binary data and are considered safe. The first parameter found in the $targetpdf will be used for the injection, and henceforth the last occurence of that parameter will be the entrypoint. The encrypted data will be appended to the data already present in the stream along with a prepended identifier "6d796f6f6c"(myool).
+These object parameters: **"/Subtype /Type1C", "/Subtype /Image", or "/BitsPerSample"**, define streams which can hold raw binary data. *myool* looks for these parameters and their corresponding "endstream"'s which are recorded into an array of entrypoints. The entrypoints are shuffled randomly, then iterated through, copying chunks of data into each. Chunks are prepended with a secret key and an order number for easier extraction. The filesignature of the encrypted data is also overwritten so any attempt to look for it will fail unless the secret key is known and the chunks are recovered and re-ordered.
 ```
 592 0 obj
 <<
@@ -39,13 +39,12 @@ stream
 ^@^@^F^A^C^@^C^@^@^@^A^@^F^@^@^A^Z^@^E^@^@^@^A^@^@^A^V^A^[^@^E^@^@^@^A^@^@^A^^^A(^@^C^@^@^@^A^@^B^
 @^@^B^A^@^D^@^@^@^A^@^@^A&^B^B^@^D^@^@^@^A^@^@^R1^@^@^@^@^@^@^@H^@^@^@^A^@^@^@H^@^@^@^AÿØÿà^@^PJFI
 F^@^A^B^A^@H^@H^@^@ÿí^@^LAdobe_CM^@^Bÿî.......raw binary data
-6d796f6f6c                <--- Identifier
-encrypted data goes here  <--- Appended data
+6d796f6f6c7                     <--- Identifier = "6d796f6f6c" + ordernumber(7)
+encrypted data chunk goes here  <--- Appended data
 endstream
 ```
-*Thaaat's iit*
 
-When it comes time to recompress the $targetpdf to $enc-targetpdf, *pdftk* will fix the object and the XREF table to accomodate the increase in size. The result of this injection should not affect the quality of images, fonts, pages, loading times, etc. But that isn't guaranteed! Results may vary!
+When it comes time to recompress the $targetpdf to $enc-targetpdf, *pdftk* will correct the objects and the XREF table to accomodate the increase in size. The result of this injection should not affect the quality of images, fonts, pages, loading times, etc. But that isn't guaranteed! Results may vary!
 
 If no parameters are found, the $targetpdf will still contain some stream in it that may be used for injection. Most of the time it is a text stream *see below*. However, the stream may not be meant to hold raw binary data. 
 ```
@@ -69,7 +68,3 @@ encrypted data goes here  <--- Appended data
 endstream 
 ```
 If thats the case, then theres a good chance you will run into warnings regarding the format or data on the page where the data was injected into. The page could raise an error and or not display anything at all. And lastly, depending on the size of the encrypted data, the resultant pdf may spend some time loading when you open it, before displaying the pages (regardless of which reader you use).
-
-### **FUTURE:**
-
-1. SPLIT-SPREAD-SCRAMBLE the data throughout the $targetpdf, if multiple parameters are found.
