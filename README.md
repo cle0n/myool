@@ -1,5 +1,7 @@
 # myool
 
+The Python version of myool for both Windows and Linux. It is much faster since it doesn't hit disk a bunch of times. While functional(not really), it is not fully done yet. See pymyool.py for TODO list and usage.
+
 Encrypt a file(archive) using AES-256 and hide it in any pdf document. \**requires pdftk for PDF compression*\*
 
 ### To hide a file:
